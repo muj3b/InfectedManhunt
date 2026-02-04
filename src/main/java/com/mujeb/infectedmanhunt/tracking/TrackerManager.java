@@ -108,18 +108,27 @@ public class TrackerManager {
 
     private UUID findNearestSpeedrunner(Player hunter) {
         Location hloc = hunter.getLocation();
+        World hw = hloc.getWorld();
+        if (hw == null) return null;
         double best = Double.MAX_VALUE;
         UUID bestId = null;
+        UUID fallbackId = null;
         for (UUID id : gameManager.getSpeedrunners()) {
             Player p = Bukkit.getPlayer(id);
             if (p == null || !p.isOnline()) continue;
+            if (fallbackId == null) {
+                fallbackId = id;
+            }
+            if (!hw.equals(p.getWorld())) {
+                continue;
+            }
             double d = p.getLocation().distanceSquared(hloc);
             if (d < best) {
                 best = d;
                 bestId = id;
             }
         }
-        return bestId;
+        return bestId != null ? bestId : fallbackId;
     }
 
     private Location resolveTrackingLocation(Player hunter, UUID targetId, Player target) {

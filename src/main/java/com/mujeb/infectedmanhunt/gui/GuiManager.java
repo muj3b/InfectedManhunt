@@ -184,6 +184,9 @@ public class GuiManager implements Listener {
         ));
         addButton(session, 11, "update_ticks", update, ctx -> {
             adjustInt("tracking.update_ticks", ctx.click, 1, 200, 5);
+            if (plugin.getGameManager().isRunning()) {
+                plugin.getTrackerManager().startTracking();
+            }
             reopen(ctx.player);
         });
 

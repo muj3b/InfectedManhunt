@@ -2,6 +2,7 @@ package com.mujeb.infectedmanhunt.listeners;
 
 import com.mujeb.infectedmanhunt.InfectedManhuntPlugin;
 import com.mujeb.infectedmanhunt.game.GameManager;
+import com.mujeb.infectedmanhunt.utils.Msg;
 import com.mujeb.infectedmanhunt.utils.TitleUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -21,6 +22,7 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -48,7 +50,7 @@ public class GameListener implements Listener {
         Player player = event.getEntity();
         if (gm.isSpeedrunner(player)) {
             // Infect on death
-            Bukkit.getScheduler().runTask(plugin, () -> gm.infect(player));
+            gm.convertSpeedrunner(player, true, false, false);
         }
         if (gm.isInfected(player)) {
             event.getDrops().removeIf(item -> item != null && item.getType() == Material.COMPASS);
@@ -145,6 +147,10 @@ public class GameListener implements Listener {
         // Keep teams updated for late joiners
         GameManager gm = plugin.getGameManager();
         if (gm.isRunning()) {
+            if (!gm.isInfected(event.getPlayer()) && !gm.isSpeedrunner(event.getPlayer())) {
+                gm.addLateJoinerAsSpeedrunner(event.getPlayer());
+                Msg.send(event.getPlayer(), "§e[Infected] Game in progress. You joined as a speedrunner.");
+            }
             gm.assignScoreboard(event.getPlayer());
             gm.applyTeams();
             if (gm.isInfected(event.getPlayer())) {
@@ -152,6 +158,16 @@ public class GameListener implements Listener {
             } else if (gm.isSpeedrunner(event.getPlayer())) {
                 Bukkit.getScheduler().runTask(plugin, () -> gm.stripCompass(event.getPlayer()));
             }
+        }
+    }
+
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        GameManager gm = plugin.getGameManager();
+        if (!gm.isRunning()) return;
+        Player player = event.getPlayer();
+        if (gm.isSpeedrunner(player)) {
+            gm.convertSpeedrunner(player, true, false, false);
         }
     }
 

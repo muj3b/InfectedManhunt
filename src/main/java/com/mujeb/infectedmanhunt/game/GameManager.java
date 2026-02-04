@@ -146,6 +146,9 @@ public class GameManager {
 
     public void resetGame() {
         plugin.getTrackerManager().stopTracking();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            stripCompass(p);
+        }
         resetInternal();
         state = GameState.LOBBY;
         clearTeams();
@@ -161,6 +164,10 @@ public class GameManager {
     }
 
     public void infect(Player player) {
+        convertSpeedrunner(player, true, true, true);
+    }
+
+    public void convertSpeedrunner(Player player, boolean announce, boolean giveCompass, boolean showTitle) {
         if (player == null) return;
         UUID id = player.getUniqueId();
         if (!speedrunners.contains(id)) return;
@@ -169,16 +176,16 @@ public class GameManager {
         infected.add(id);
         applyTeams();
 
-        Msg.broadcast("§c[Infected] " + player.getName() + " has been infected and joined the hunters!");
-        boolean titles = plugin.getConfig().getBoolean("start.announce_titles", true);
-        if (titles) {
+        if (announce) {
+            Msg.broadcast("§c[Infected] " + player.getName() + " has been infected and joined the hunters!");
+        }
+        if (showTitle && plugin.getConfig().getBoolean("start.announce_titles", true)) {
             TitleUtil.showTitle(player, "§c§lINFECTED!", "§7You are now a Hunter", 10, 60, 10);
         }
+        if (giveCompass) {
+            giveCompass(player);
+        }
 
-        // Give compass immediately if possible
-        giveCompass(player);
-
-        // Win check
         if (speedrunners.isEmpty()) {
             endGame(false);
         }
@@ -307,6 +314,7 @@ public class GameManager {
         Msg.broadcast("§c§l[Infected] " + infectedPlayer.getName() + " is the INFECTED HUNTER!");
         Msg.broadcast("§e[Infected] Speedrunners: beat the Ender Dragon before everyone is infected.");
         Msg.broadcast("§e[Infected] If you die, you join the infected hunters.");
+        Msg.broadcast("§7[Infected] Plugin by muj4b.");
 
         boolean titles = plugin.getConfig().getBoolean("start.announce_titles", true);
         if (titles) {
@@ -325,7 +333,18 @@ public class GameManager {
         if (!infected.contains(hunter.getUniqueId())) return;
         boolean hasCompass = hunter.getInventory().contains(org.bukkit.Material.COMPASS);
         if (!hasCompass) {
-            hunter.getInventory().addItem(new org.bukkit.inventory.ItemStack(org.bukkit.Material.COMPASS, 1));
+            if (hunter.getInventory().getItemInOffHand() == null
+                    || hunter.getInventory().getItemInOffHand().getType() == org.bukkit.Material.AIR) {
+                hunter.getInventory().setItemInOffHand(new org.bukkit.inventory.ItemStack(org.bukkit.Material.COMPASS, 1));
+                return;
+            }
+            Map<Integer, ItemStack> leftover = hunter.getInventory()
+                    .addItem(new org.bukkit.inventory.ItemStack(org.bukkit.Material.COMPASS, 1));
+            if (!leftover.isEmpty()) {
+                hunter.getWorld().dropItemNaturally(hunter.getLocation(),
+                        new org.bukkit.inventory.ItemStack(org.bukkit.Material.COMPASS, 1));
+                Msg.send(hunter, "§e[Infected] Inventory full. Dropped a compass at your feet.");
+            }
         }
     }
 
@@ -344,12 +363,22 @@ public class GameManager {
                 player.getInventory().getItemInOffHand().getType() == org.bukkit.Material.COMPASS) {
             player.getInventory().setItemInOffHand(null);
         }
-        for (ItemStack stack : player.getInventory().getContents()) {
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int i = 0; i < contents.length; i++) {
+            ItemStack stack = contents[i];
             if (stack != null && stack.getType() == org.bukkit.Material.COMPASS) {
-                stack.setAmount(0);
+                player.getInventory().setItem(i, null);
             }
         }
         player.updateInventory();
+    }
+
+    public void addLateJoinerAsSpeedrunner(Player player) {
+        if (player == null) return;
+        UUID id = player.getUniqueId();
+        if (infected.contains(id) || speedrunners.contains(id)) return;
+        speedrunners.add(id);
+        applyTeams();
     }
 
     public void assignScoreboard(Player player) {

@@ -9,14 +9,14 @@ import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerKickEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 public class ChatInputHandler implements Listener {
     private final InfectedManhuntPlugin plugin;
-    private final Map<UUID, Consumer<String>> callbacks = new HashMap<>();
+    private final Map<UUID, Consumer<String>> callbacks = new ConcurrentHashMap<>();
 
     public ChatInputHandler(InfectedManhuntPlugin plugin) {
         this.plugin = plugin;
