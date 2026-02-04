@@ -1,0 +1,25 @@
+# InfectedManhunt Configuration
+
+start:
+  teleport_to_spawn: true
+  announce_titles: true
+
+respawn:
+  # vanilla | world_spawn | fixed
+  mode: vanilla
+  world: "world"
+  x: 0.5
+  y: 64.0
+  z: 0.5
+
+tracking:
+  update_ticks: 20
+  message_cooldown_seconds: 5
+  # When true, tell hunters when tracking uses last-known locations
+  notify_last_known: true
+
+teams:
+  speedrunner_color: "GREEN"
+  infected_color: "RED"
+  speedrunner_prefix: "§a[R] "
+  infected_prefix: "§c[INF] "
