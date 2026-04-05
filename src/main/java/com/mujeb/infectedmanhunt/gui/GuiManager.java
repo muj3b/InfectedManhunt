@@ -2,13 +2,14 @@ package com.mujeb.infectedmanhunt.gui;
 
 import com.mujeb.infectedmanhunt.InfectedManhuntPlugin;
 import com.mujeb.infectedmanhunt.game.GameManager;
-import com.mujeb.infectedmanhunt.tracking.TrackerManager;
+import com.mujeb.infectedmanhunt.game.ParticipantRole;
 import com.mujeb.infectedmanhunt.utils.GuiCompat;
 import com.mujeb.infectedmanhunt.utils.Msg;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -27,6 +28,13 @@ import java.util.*;
 import java.util.function.Consumer;
 
 public class GuiManager implements Listener {
+    private static final List<Integer> TEAM_MANAGEMENT_SLOTS = List.of(
+            10, 11, 12, 13, 14, 15, 16,
+            19, 20, 21, 22, 23, 24, 25,
+            28, 29, 30, 31, 32, 33, 34,
+            37, 38, 39, 40, 41, 42, 43
+    );
+
     private final InfectedManhuntPlugin plugin;
     private final NamespacedKey buttonKey;
     private final Map<UUID, MenuSession> sessions = new HashMap<>();
@@ -93,7 +101,7 @@ public class GuiManager implements Listener {
         ItemStack respawn = icon(Material.RESPAWN_ANCHOR, "§dRespawn Settings", List.of("§7Infected respawn mode"));
         addButton(session, 15, "respawn", respawn, ctx -> openRespawn(ctx.player));
 
-        ItemStack teams = icon(Material.NAME_TAG, "§6Team Settings", List.of("§7Colors and prefixes"));
+        ItemStack teams = icon(Material.NAME_TAG, "§6Team Settings", List.of("§7Colors, prefixes, and roster tools"));
         addButton(session, 16, "teams", teams, ctx -> openTeams(ctx.player));
 
         boolean teleportStart = plugin.getConfig().getBoolean("start.teleport_to_spawn", true);
@@ -331,6 +339,13 @@ public class GuiManager implements Listener {
             reopen(ctx.player);
         });
 
+        ItemStack manage = icon(Material.PLAYER_HEAD, "§eManage Active Teams", List.of(
+                "§7Move players between runner and infected",
+                "§7Left click player: runner",
+                "§7Right click player: infected"
+        ));
+        addButton(session, 24, "manage", manage, ctx -> openTeamManagement(ctx.player, 0));
+
         ItemStack back = icon(Material.ARROW, "§7Back", List.of());
         addButton(session, 40, "back", back, ctx -> openMain(ctx.player));
 
@@ -338,6 +353,11 @@ public class GuiManager implements Listener {
     }
 
     public void openTargetPicker(Player player) {
+        if (!plugin.getGameManager().isInfected(player)) {
+            Msg.send(player, "§cOnly infected hunters can use the target picker.");
+            return;
+        }
+
         Inventory inv = GuiCompat.createInventory(null, 54, "§aPick Target");
         MenuSession session = new MenuSession(MenuKey.TARGET_PICKER, inv);
         fill(inv, Material.BLACK_STAINED_GLASS_PANE);
@@ -369,6 +389,97 @@ public class GuiManager implements Listener {
         openSession(player, session);
     }
 
+    public void openTeamManagement(Player player, int page) {
+        Inventory inv = GuiCompat.createInventory(null, 54, "§cManage Active Teams");
+        MenuSession session = new MenuSession(MenuKey.TEAM_MANAGEMENT, inv, Math.max(0, page));
+        fill(inv, Material.BLACK_STAINED_GLASS_PANE);
+
+        GameManager gm = plugin.getGameManager();
+        if (!gm.isRunning()) {
+            ItemStack inactive = icon(Material.BARRIER, "§cNo Active Match", List.of(
+                    "§7Start a game before editing teams."
+            ));
+            addButton(session, 22, "inactive", inactive, ctx -> {});
+
+            ItemStack back = icon(Material.ARROW, "§7Back", List.of());
+            addButton(session, 49, "back", back, ctx -> openTeams(ctx.player));
+            openSession(player, session);
+            return;
+        }
+
+        List<UUID> participants = collectTeamManagementParticipants(gm);
+        int totalPages = Math.max(1, (int) Math.ceil((double) participants.size() / TEAM_MANAGEMENT_SLOTS.size()));
+        int safePage = Math.min(session.page, totalPages - 1);
+        if (safePage != session.page) {
+            session = new MenuSession(MenuKey.TEAM_MANAGEMENT, inv, safePage);
+            fill(inv, Material.BLACK_STAINED_GLASS_PANE);
+        }
+
+        ItemStack info = icon(Material.BOOK, "§eTeam Controls", List.of(
+                "§7Left click: set runner",
+                "§7Right click: set infected",
+                "§7Shift click: toggle current role",
+                "§7Page: §f" + (safePage + 1) + "§7/§f" + totalPages
+        ));
+        addButton(session, 4, "info", info, ctx -> {});
+
+        if (participants.isEmpty()) {
+            ItemStack empty = icon(Material.BARRIER, "§cNo Participants", List.of(
+                    "§7There are no tracked players in this match."
+            ));
+            addButton(session, 22, "empty", empty, ctx -> {});
+        } else {
+            int startIndex = safePage * TEAM_MANAGEMENT_SLOTS.size();
+            int endIndex = Math.min(participants.size(), startIndex + TEAM_MANAGEMENT_SLOTS.size());
+            for (int index = startIndex; index < endIndex; index++) {
+                UUID participantId = participants.get(index);
+                OfflinePlayer target = Bukkit.getOfflinePlayer(participantId);
+                ParticipantRole currentRole = gm.getParticipantRole(participantId);
+                String name = target.getName() != null ? target.getName() : participantId.toString();
+                boolean online = target.isOnline();
+
+                ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+                SkullMeta meta = (SkullMeta) head.getItemMeta();
+                meta.setOwningPlayer(target);
+                GuiCompat.setDisplayName(meta, roleColor(currentRole) + name);
+                GuiCompat.setLore(meta, List.of(
+                        "§7Current: " + roleLabel(currentRole),
+                        "§7Status: " + (online ? "§aOnline" : "§7Offline"),
+                        "§7Left click: set runner",
+                        "§7Right click: set infected",
+                        "§7Shift click: toggle"
+                ));
+                head.setItemMeta(meta);
+
+                int slot = TEAM_MANAGEMENT_SLOTS.get(index - startIndex);
+                addButton(session, slot, "participant_" + participantId, head, ctx -> {
+                    ParticipantRole desiredRole = currentRole == ParticipantRole.INFECTED
+                            ? ParticipantRole.SPEEDRUNNER
+                            : ParticipantRole.INFECTED;
+                    if (!ctx.click.isShiftClick()) {
+                        desiredRole = ctx.click.isRightClick() ? ParticipantRole.INFECTED : ParticipantRole.SPEEDRUNNER;
+                    }
+                    applyRoleChange(ctx.player, participantId, desiredRole);
+                    openTeamManagement(ctx.player, safePage);
+                });
+            }
+        }
+
+        if (safePage > 0) {
+            ItemStack prev = icon(Material.ARROW, "§ePrevious Page", List.of());
+            addButton(session, 45, "prev", prev, ctx -> openTeamManagement(ctx.player, safePage - 1));
+        }
+        if (safePage + 1 < totalPages) {
+            ItemStack next = icon(Material.SPECTRAL_ARROW, "§eNext Page", List.of());
+            addButton(session, 53, "next", next, ctx -> openTeamManagement(ctx.player, safePage + 1));
+        }
+
+        ItemStack back = icon(Material.ARROW, "§7Back", List.of());
+        addButton(session, 49, "back", back, ctx -> openTeams(ctx.player));
+
+        openSession(player, session);
+    }
+
     public boolean isMenuInventory(Inventory inv) {
         if (inv == null) return false;
         for (MenuSession session : sessions.values()) {
@@ -394,6 +505,7 @@ public class GuiManager implements Listener {
             case TRACKING -> openTracking(player);
             case RESPAWN -> openRespawn(player);
             case TEAMS -> openTeams(player);
+            case TEAM_MANAGEMENT -> openTeamManagement(player, session.page);
             case TARGET_PICKER -> openTargetPicker(player);
         }
     }
@@ -494,11 +606,17 @@ public class GuiManager implements Listener {
     private static class MenuSession {
         final MenuKey key;
         final Inventory inventory;
+        final int page;
         final Map<String, Consumer<ClickContext>> actions = new HashMap<>();
 
         MenuSession(MenuKey key, Inventory inventory) {
+            this(key, inventory, 0);
+        }
+
+        MenuSession(MenuKey key, Inventory inventory, int page) {
             this.key = key;
             this.inventory = inventory;
+            this.page = page;
         }
     }
 
@@ -510,5 +628,79 @@ public class GuiManager implements Listener {
             this.player = player;
             this.click = click;
         }
+    }
+
+    private List<UUID> collectTeamManagementParticipants(GameManager gm) {
+        LinkedHashSet<UUID> participants = new LinkedHashSet<>(gm.getParticipants());
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            participants.add(online.getUniqueId());
+        }
+
+        List<UUID> ordered = new ArrayList<>(participants);
+        ordered.sort(Comparator
+                .comparing((UUID id) -> !Bukkit.getOfflinePlayer(id).isOnline())
+                .thenComparing(id -> {
+                    OfflinePlayer offline = Bukkit.getOfflinePlayer(id);
+                    return offline.getName() == null ? id.toString() : offline.getName().toLowerCase(Locale.ROOT);
+                }));
+        return ordered;
+    }
+
+    private void applyRoleChange(Player actor, UUID participantId, ParticipantRole targetRole) {
+        GameManager gm = plugin.getGameManager();
+        if (!gm.isRunning()) {
+            Msg.send(actor, "§cNo active game is running.");
+            return;
+        }
+
+        ParticipantRole currentRole = gm.getParticipantRole(participantId);
+        if (currentRole == targetRole) {
+            Msg.send(actor, "§e[Infected] " + participantName(participantId) + " is already " + roleLabel(targetRole) + "§e.");
+            return;
+        }
+        if (targetRole == ParticipantRole.SPEEDRUNNER && currentRole == ParticipantRole.INFECTED && !gm.canConvertToSpeedrunner(participantId)) {
+            Msg.send(actor, "§c[Infected] You must keep at least one infected hunter in an active game.");
+            return;
+        }
+
+        boolean changed = gm.setParticipantRole(participantId, targetRole, true, true, true);
+        if (!changed) {
+            Msg.send(actor, "§c[Infected] Unable to update " + participantName(participantId) + ".");
+            return;
+        }
+
+        Msg.send(actor, "§a[Infected] " + participantName(participantId) + " is now " + roleLabel(targetRole) + "§a.");
+    }
+
+    private String participantName(UUID participantId) {
+        Player online = Bukkit.getPlayer(participantId);
+        if (online != null) {
+            return online.getName();
+        }
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(participantId);
+        if (offline.getName() != null && !offline.getName().isBlank()) {
+            return offline.getName();
+        }
+        return participantId.toString();
+    }
+
+    private ChatColor roleColor(ParticipantRole role) {
+        if (role == ParticipantRole.INFECTED) {
+            return ChatColor.RED;
+        }
+        if (role == ParticipantRole.SPEEDRUNNER) {
+            return ChatColor.GREEN;
+        }
+        return ChatColor.GRAY;
+    }
+
+    private String roleLabel(ParticipantRole role) {
+        if (role == ParticipantRole.INFECTED) {
+            return "§cinfected";
+        }
+        if (role == ParticipantRole.SPEEDRUNNER) {
+            return "§arunner";
+        }
+        return "§7not assigned";
     }
 }

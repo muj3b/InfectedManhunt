@@ -38,6 +38,8 @@
   - Sneak + right‑click opens a target picker GUI.
   - Uses last known locations when runners are in other dimensions.
   - Compass is anti‑drop and cannot be picked up by speedrunners.
+- **Live Team Management**: Operators can move players between runner and infected directly from the GUI or command line during a match.
+- **Disconnect-Safe State**: Leaving the server preserves your current team instead of corrupting the match state.
 - **Minimal Visuals**: Standard Minecraft look with clean chat + title messaging.
 - **Full GUI Control**: Everything in the config and commands is controllable via GUI.
 
@@ -60,6 +62,7 @@
 - `/infected stop` Reset the game
 - `/infected status` Show game status
 - `/infected gui` Open admin GUI
+- `/infected team <player> <runner|infected>` Move a player between teams mid-game
 - `/infected track` Open target picker (infected hunters only)
 - `/infected reload` Reload config
 
@@ -99,6 +102,13 @@ Everything in config + commands is available inside the GUI.
 **Team Menu**
 - Cycle team colors
 - Edit prefixes by chat
+- Open live team management
+
+**Team Management**
+- Left click a player to make them a speedrunner
+- Right click a player to make them infected
+- Shift click to toggle their current team
+- Works for online and tracked offline match participants
 
 **Target Picker**
 - Select any active speedrunner to track
@@ -135,6 +145,7 @@ Everything in config + commands is available inside the GUI.
 - All other players are speedrunners.
 - Whenever a speedrunner dies, they permanently convert into infected hunters.
 - Hunters always remain hunters even if they die again.
+- Disconnecting does not change your team.
 - The infected team wins when no speedrunners remain.
 
 ---
@@ -158,7 +169,7 @@ mvn package
 ```
 
 Jar output:
-`InfectedManhunt/target/infectedmanhunt-1.0.0.jar`
+`InfectedManhunt/target/infectedmanhunt-1.0.2.jar`
 
 ---
 

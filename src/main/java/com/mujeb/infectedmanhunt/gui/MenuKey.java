@@ -6,5 +6,6 @@ public enum MenuKey {
     TRACKING,
     RESPAWN,
     TEAMS,
+    TEAM_MANAGEMENT,
     TARGET_PICKER
 }

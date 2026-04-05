@@ -2,6 +2,7 @@ package com.mujeb.infectedmanhunt.tracking;
 
 import com.mujeb.infectedmanhunt.InfectedManhuntPlugin;
 import com.mujeb.infectedmanhunt.game.GameManager;
+import com.mujeb.infectedmanhunt.game.ParticipantRole;
 import com.mujeb.infectedmanhunt.utils.Msg;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -28,8 +29,8 @@ public class TrackerManager {
     }
 
     public void startTracking() {
-        stopTracking();
-        int updateTicks = Math.max(5, plugin.getConfig().getInt("tracking.update_ticks", 20));
+        cancelTask();
+        int updateTicks = Math.max(1, plugin.getConfig().getInt("tracking.update_ticks", 20));
         task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (!gameManager.isRunning()) return;
             for (UUID hunterId : gameManager.getInfected()) {
@@ -42,12 +43,26 @@ public class TrackerManager {
     }
 
     public void stopTracking() {
+        cancelTask();
+        hunterTargets.clear();
+        lastNotify.clear();
+    }
+
+    public void handleRoleChange(UUID playerId, ParticipantRole newRole) {
+        if (playerId == null || newRole == null) return;
+        if (newRole == ParticipantRole.INFECTED) {
+            hunterTargets.entrySet().removeIf(entry -> playerId.equals(entry.getValue()));
+        } else {
+            hunterTargets.remove(playerId);
+        }
+        lastNotify.remove(playerId);
+    }
+
+    private void cancelTask() {
         if (task != null) {
             task.cancel();
             task = null;
         }
-        hunterTargets.clear();
-        lastNotify.clear();
     }
 
     public void cycleTarget(Player hunter) {
@@ -174,7 +189,6 @@ public class TrackerManager {
 
     private void updateCompassItem(Player hunter, Location target) {
         if (hunter == null) return;
-        if (!hunter.getInventory().contains(Material.COMPASS)) return;
 
         ItemStack off = hunter.getInventory().getItemInOffHand();
         updateCompassMeta(off, target);

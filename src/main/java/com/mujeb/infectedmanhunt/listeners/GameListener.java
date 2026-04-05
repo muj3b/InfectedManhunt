@@ -165,10 +165,7 @@ public class GameListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         GameManager gm = plugin.getGameManager();
         if (!gm.isRunning()) return;
-        Player player = event.getPlayer();
-        if (gm.isSpeedrunner(player)) {
-            gm.convertSpeedrunner(player, true, false, false);
-        }
+        gm.handleDisconnect(event.getPlayer());
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)

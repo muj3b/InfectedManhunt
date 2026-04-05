@@ -6,6 +6,7 @@ import com.mujeb.infectedmanhunt.utils.TitleUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -61,8 +62,25 @@ public class GameManager {
         return Collections.unmodifiableSet(infected);
     }
 
+    public Set<UUID> getParticipants() {
+        LinkedHashSet<UUID> participants = new LinkedHashSet<>(infected);
+        participants.addAll(speedrunners);
+        return Collections.unmodifiableSet(participants);
+    }
+
     public UUID getInitialInfected() {
         return initialInfected;
+    }
+
+    public ParticipantRole getParticipantRole(UUID playerId) {
+        if (playerId == null) return null;
+        if (infected.contains(playerId)) return ParticipantRole.INFECTED;
+        if (speedrunners.contains(playerId)) return ParticipantRole.SPEEDRUNNER;
+        return null;
+    }
+
+    public boolean canConvertToSpeedrunner(UUID playerId) {
+        return playerId == null || !infected.contains(playerId) || infected.size() > 1;
     }
 
     public void startGame(Player chosenInfected) {
@@ -169,26 +187,81 @@ public class GameManager {
 
     public void convertSpeedrunner(Player player, boolean announce, boolean giveCompass, boolean showTitle) {
         if (player == null) return;
-        UUID id = player.getUniqueId();
-        if (!speedrunners.contains(id)) return;
+        setParticipantRole(player.getUniqueId(), ParticipantRole.INFECTED, announce, giveCompass, showTitle);
+    }
 
-        speedrunners.remove(id);
-        infected.add(id);
+    public boolean setParticipantRole(UUID playerId, ParticipantRole targetRole, boolean announce, boolean giveCompass, boolean showTitle) {
+        if (playerId == null || targetRole == null || !isRunning()) return false;
+
+        ParticipantRole currentRole = getParticipantRole(playerId);
+        if (currentRole == targetRole) {
+            Player online = Bukkit.getPlayer(playerId);
+            if (online != null && online.isOnline()) {
+                if (targetRole == ParticipantRole.INFECTED && giveCompass) {
+                    giveCompass(online);
+                } else if (targetRole == ParticipantRole.SPEEDRUNNER) {
+                    stripCompass(online);
+                }
+            }
+            applyTeams();
+            return false;
+        }
+
+        if (currentRole == ParticipantRole.INFECTED && targetRole == ParticipantRole.SPEEDRUNNER && !canConvertToSpeedrunner(playerId)) {
+            return false;
+        }
+
+        speedrunners.remove(playerId);
+        infected.remove(playerId);
+
+        if (targetRole == ParticipantRole.INFECTED) {
+            infected.add(playerId);
+        } else {
+            speedrunners.add(playerId);
+        }
+
+        plugin.getTrackerManager().handleRoleChange(playerId, targetRole);
         applyTeams();
 
-        if (announce) {
-            Msg.broadcast("§c[Infected] " + player.getName() + " has been infected and joined the hunters!");
-        }
-        if (showTitle && plugin.getConfig().getBoolean("start.announce_titles", true)) {
-            TitleUtil.showTitle(player, "§c§lINFECTED!", "§7You are now a Hunter", 10, 60, 10);
-        }
-        if (giveCompass) {
-            giveCompass(player);
+        Player online = Bukkit.getPlayer(playerId);
+        if (online != null && online.isOnline()) {
+            if (targetRole == ParticipantRole.INFECTED) {
+                if (giveCompass) {
+                    giveCompass(online);
+                }
+            } else {
+                stripCompass(online);
+                updateLastOverworldLocation(online, online.getLocation());
+            }
         }
 
-        if (speedrunners.isEmpty()) {
-            endGame(false);
+        if (announce) {
+            if (targetRole == ParticipantRole.INFECTED) {
+                Msg.broadcast(currentRole == null
+                        ? "§c[Infected] " + getParticipantName(playerId) + " has joined the active roster as infected."
+                        : "§c[Infected] " + getParticipantName(playerId) + " has been moved to the infected team.");
+            } else {
+                Msg.broadcast(currentRole == null
+                        ? "§a[Infected] " + getParticipantName(playerId) + " has joined the active roster as a speedrunner."
+                        : "§a[Infected] " + getParticipantName(playerId) + " has been moved back to the speedrunners.");
+            }
         }
+        if (showTitle && online != null && online.isOnline() && plugin.getConfig().getBoolean("start.announce_titles", true)) {
+            if (targetRole == ParticipantRole.INFECTED) {
+                TitleUtil.showTitle(online, "§c§lINFECTED!", "§7You are now a Hunter", 10, 60, 10);
+            } else {
+                TitleUtil.showTitle(online, "§a§lRUNNER", "§7You are back on the speedrunner team", 10, 60, 10);
+            }
+        }
+
+        if (targetRole == ParticipantRole.INFECTED) {
+            plugin.getTrackerManager().startTracking();
+            if (speedrunners.isEmpty()) {
+                endGame(false);
+            }
+        }
+
+        return true;
     }
 
     public void updateLastOverworldLocation(Player runner, Location location) {
@@ -314,7 +387,7 @@ public class GameManager {
         Msg.broadcast("§c§l[Infected] " + infectedPlayer.getName() + " is the INFECTED HUNTER!");
         Msg.broadcast("§e[Infected] Speedrunners: beat the Ender Dragon before everyone is infected.");
         Msg.broadcast("§e[Infected] If you die, you join the infected hunters.");
-        Msg.broadcast("§7[Infected] Plugin by muj4b.");
+        Msg.broadcast("§7[Infected] Plugin by muj3b.");
 
         boolean titles = plugin.getConfig().getBoolean("start.announce_titles", true);
         if (titles) {
@@ -381,6 +454,14 @@ public class GameManager {
         applyTeams();
     }
 
+    public void handleDisconnect(Player player) {
+        if (player == null || !isRunning()) return;
+        if (isSpeedrunner(player)) {
+            updateLastOverworldLocation(player, player.getLocation());
+        }
+        applyTeams();
+    }
+
     public void assignScoreboard(Player player) {
         if (player == null) return;
         ensureTeams();
@@ -397,5 +478,17 @@ public class GameManager {
         }
         previousBoards.clear();
         pluginBoard = null;
+    }
+
+    private String getParticipantName(UUID playerId) {
+        Player online = Bukkit.getPlayer(playerId);
+        if (online != null) {
+            return online.getName();
+        }
+        OfflinePlayer offline = Bukkit.getOfflinePlayer(playerId);
+        if (offline.getName() != null && !offline.getName().isBlank()) {
+            return offline.getName();
+        }
+        return playerId.toString();
     }
 }
