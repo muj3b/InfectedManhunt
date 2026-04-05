@@ -26,8 +26,8 @@
 <table>
   <tr>
     <td align="center">
-      <strong>🧟 Infected Manhunt</strong><br>
-      <a href="https://www.youtube.com/@Sapnap"><img src="https://img.youtube.com/vi/default/0.jpg" width="300"></a><br>
+      <strong>🧟‍♂️ Infected Manhunt</strong><br>
+      <a href="https://www.youtube.com/watch?v=ReZMjIoMBwY"><img src="https://img.youtube.com/vi/ReZMjIoMBwY/0.jpg" width="300"></a><br>
       <em>Inspired by Sapnap's viral format</em>
     </td>
   </tr>
