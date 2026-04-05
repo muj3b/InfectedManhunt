@@ -387,7 +387,7 @@ public class GameManager {
         Msg.broadcast("§c§l[Infected] " + infectedPlayer.getName() + " is the INFECTED HUNTER!");
         Msg.broadcast("§e[Infected] Speedrunners: beat the Ender Dragon before everyone is infected.");
         Msg.broadcast("§e[Infected] If you die, you join the infected hunters.");
-        Msg.broadcast("§7[Infected] Plugin by muj3b.");
+        Msg.broadcast("§7[Infected] Plugin by muj4b.");
 
         boolean titles = plugin.getConfig().getBoolean("start.announce_titles", true);
         if (titles) {
